@@ -107,10 +107,25 @@
 
     <div class="section">
       <h2>Colors</h2>
-      <label class="field" style="margin-top:0;">Line color</label>
+      <label class="field" style="margin-top:0;">Top outer line</label>
       <div class="color-row">
-        <input type="color" id="col-line" value="#aab0bd">
-        <span id="val-col-line">#AAB0BD</span>
+        <input type="color" id="col-line-0" value="#aab0bd">
+        <span id="val-col-line-0">#AAB0BD</span>
+      </div>
+      <label class="field">Top inner line</label>
+      <div class="color-row">
+        <input type="color" id="col-line-1" value="#aab0bd">
+        <span id="val-col-line-1">#AAB0BD</span>
+      </div>
+      <label class="field">Bottom inner line</label>
+      <div class="color-row">
+        <input type="color" id="col-line-2" value="#aab0bd">
+        <span id="val-col-line-2">#AAB0BD</span>
+      </div>
+      <label class="field">Bottom outer line</label>
+      <div class="color-row">
+        <input type="color" id="col-line-3" value="#aab0bd">
+        <span id="val-col-line-3">#AAB0BD</span>
       </div>
       <label class="field">Dot color</label>
       <div class="color-row">
@@ -137,6 +152,9 @@
 
       <label class="field">Dot size <span class="range-val" id="val-dotsize">7</span></label>
       <input type="range" id="rng-dotsize" min="3" max="16" value="7">
+
+      <label class="field">Dot count <span class="range-val" id="val-dotcount">3</span></label>
+      <input type="range" id="rng-dotcount" min="1" max="16" value="3">
 
       <label class="checkbox-row">
         <input type="checkbox" id="chk-glow" checked>
@@ -269,14 +287,20 @@
   // not drawn while it's back there (see renderFrame), but phi keeps
   // advancing regardless, so it's still genuinely orbiting the whole ring.
   const BASE_PERIOD = 6; // seconds, at 1.0x speed
-  const DOTS = [
-    { ring: 0, phase: 0 },
-    { ring: 1, phase: Math.PI * 2/3 },
-    { ring: 3, phase: Math.PI * 4/3 },
-  ];
+  // Dots are distributed round-robin across the 4 rings and spread evenly
+  // around the full circle, so any count from 1 to 16 stays symmetric
+  // rather than clumping on one ring.
+  function buildDots(count){
+    const dots = [];
+    for(let i=0; i<count; i++){
+      dots.push({ ring: i % RINGS.length, phase: (Math.PI * 2 * i) / count });
+    }
+    return dots;
+  }
+  let DOTS = buildDots(3);
 
   // ====================== STATE ======================
-  let lineColor = '#aab0bd';
+  let lineColors = ['#aab0bd', '#aab0bd', '#aab0bd', '#aab0bd']; // one per RINGS index
   let dotColor = '#ff2ea6';
   let bgColor = '#050506';
   let bgEnabled = true;
@@ -305,10 +329,10 @@
       g.fillRect(0, 0, cw, ch);
     }
 
-    const rgb = hexToRgb(lineColor);
     g.lineCap = 'round';
     const STEPS = 400;
-    RINGS.forEach(ring => {
+    RINGS.forEach((ring, ringIdx) => {
+      const rgb = hexToRgb(lineColors[ringIdx]);
       // The ring's own farthest reach (straight ahead, phi = pi/2) — used
       // to normalize its near/far depth fade independent of the other
       // rings' tilt.
@@ -383,7 +407,7 @@
   requestAnimationFrame(tick);
 
   // ====================== CONTROLS ======================
-  const elColLine = document.getElementById('col-line');
+  const elColLines = RINGS.map((_, i) => document.getElementById('col-line-' + i));
   const elColDot = document.getElementById('col-dot');
   const elColBg = document.getElementById('col-bg');
   const elChkBg = document.getElementById('chk-bg');
@@ -391,11 +415,14 @@
   const elRngSpeed = document.getElementById('rng-speed');
   const elRngThickness = document.getElementById('rng-thickness');
   const elRngDotSize = document.getElementById('rng-dotsize');
+  const elRngDotCount = document.getElementById('rng-dotcount');
   const elChkGlow = document.getElementById('chk-glow');
 
-  elColLine.addEventListener('input', () => {
-    lineColor = elColLine.value;
-    document.getElementById('val-col-line').textContent = lineColor.toUpperCase();
+  elColLines.forEach((el, i) => {
+    el.addEventListener('input', () => {
+      lineColors[i] = el.value;
+      document.getElementById('val-col-line-' + i).textContent = el.value.toUpperCase();
+    });
   });
   elColDot.addEventListener('input', () => {
     dotColor = elColDot.value;
@@ -421,6 +448,11 @@
   elRngDotSize.addEventListener('input', () => {
     dotRadius = parseInt(elRngDotSize.value);
     document.getElementById('val-dotsize').textContent = dotRadius;
+  });
+  elRngDotCount.addEventListener('input', () => {
+    const count = parseInt(elRngDotCount.value);
+    document.getElementById('val-dotcount').textContent = count;
+    DOTS = buildDots(count);
   });
   elChkGlow.addEventListener('change', () => { glowEnabled = elChkGlow.checked; });
 
