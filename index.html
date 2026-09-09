@@ -127,10 +127,25 @@
         <input type="color" id="col-line-3" value="#aab0bd">
         <span id="val-col-line-3">#AAB0BD</span>
       </div>
-      <label class="field">Dot color</label>
+      <label class="field">Top outer dot</label>
       <div class="color-row">
-        <input type="color" id="col-dot" value="#ff2ea6">
-        <span id="val-col-dot">#FF2EA6</span>
+        <input type="color" id="col-dot-0" value="#ff2ea6">
+        <span id="val-col-dot-0">#FF2EA6</span>
+      </div>
+      <label class="field">Top inner dot</label>
+      <div class="color-row">
+        <input type="color" id="col-dot-1" value="#ff2ea6">
+        <span id="val-col-dot-1">#FF2EA6</span>
+      </div>
+      <label class="field">Bottom inner dot</label>
+      <div class="color-row">
+        <input type="color" id="col-dot-2" value="#ff2ea6">
+        <span id="val-col-dot-2">#FF2EA6</span>
+      </div>
+      <label class="field">Bottom outer dot</label>
+      <div class="color-row">
+        <input type="color" id="col-dot-3" value="#ff2ea6">
+        <span id="val-col-dot-3">#FF2EA6</span>
       </div>
       <label class="checkbox-row">
         <input type="checkbox" id="chk-bg" checked>
@@ -301,7 +316,7 @@
 
   // ====================== STATE ======================
   let lineColors = ['#aab0bd', '#aab0bd', '#aab0bd', '#aab0bd']; // one per RINGS index
-  let dotColor = '#ff2ea6';
+  let dotColors = ['#ff2ea6', '#ff2ea6', '#ff2ea6', '#ff2ea6']; // one per RINGS index — a dot takes its color from the ring it orbits
   let bgColor = '#050506';
   let bgEnabled = true;
   let speedMult = 1.0;
@@ -367,6 +382,7 @@
     const REF_Z = 0.32; // a representative "close" depth, for perspective size scaling
     DOTS.forEach(dot => {
       const ring = RINGS[dot.ring];
+      const dc = dotColors[dot.ring];
       const phi = Math.PI * 2 * t + dot.phase;
       const pt3d = ringPoint3D(ring, phi);
       const proj = project(pt3d, cw, ch);
@@ -376,13 +392,13 @@
       const scale = Math.max(0.35, Math.min(2.4, REF_Z / proj.z));
       const r = dotRadius * scale;
       if(glowEnabled){
-        g.shadowColor = dotColor;
+        g.shadowColor = dc;
         g.shadowBlur = r * 3.2 * fade;
       } else {
         g.shadowBlur = 0;
       }
       g.globalAlpha = fade;
-      g.fillStyle = dotColor;
+      g.fillStyle = dc;
       g.beginPath();
       g.arc(proj.x, proj.y, r, 0, Math.PI*2);
       g.fill();
@@ -408,7 +424,7 @@
 
   // ====================== CONTROLS ======================
   const elColLines = RINGS.map((_, i) => document.getElementById('col-line-' + i));
-  const elColDot = document.getElementById('col-dot');
+  const elColDots = RINGS.map((_, i) => document.getElementById('col-dot-' + i));
   const elColBg = document.getElementById('col-bg');
   const elChkBg = document.getElementById('chk-bg');
   const elRowColBg = document.getElementById('row-col-bg');
@@ -424,9 +440,11 @@
       document.getElementById('val-col-line-' + i).textContent = el.value.toUpperCase();
     });
   });
-  elColDot.addEventListener('input', () => {
-    dotColor = elColDot.value;
-    document.getElementById('val-col-dot').textContent = dotColor.toUpperCase();
+  elColDots.forEach((el, i) => {
+    el.addEventListener('input', () => {
+      dotColors[i] = el.value;
+      document.getElementById('val-col-dot-' + i).textContent = el.value.toUpperCase();
+    });
   });
   elColBg.addEventListener('input', () => {
     bgColor = elColBg.value;
