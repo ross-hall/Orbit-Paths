@@ -120,6 +120,25 @@
       </div>
     </div>
 
+    <div class="section" id="section-flat-layout" style="display:none;">
+      <h2>Flat Layout</h2>
+      <label class="field" style="margin-top:0;">Orbit size <span class="range-val" id="val-flat-size">65</span></label>
+      <input type="range" id="rng-flat-size" min="20" max="90" value="65">
+
+      <label class="field">Ring spacing <span class="range-val" id="val-flat-spacing">15</span></label>
+      <input type="range" id="rng-flat-spacing" min="2" max="30" value="15">
+
+      <label class="field">Line width taper <span class="range-val" id="val-flat-taper">0</span></label>
+      <input type="range" id="rng-flat-taper" min="-100" max="100" value="0">
+      <div class="hint" style="margin-top:10px; padding-top:0; border-top:none;">
+        <b>Orbit size</b> sets how big the outermost circle is.
+        <b>Ring spacing</b> sets the gap between each concentric circle.
+        <b>Line width taper</b> tapers thickness across the four rings —
+        negative thins them going outward, positive thickens them going
+        outward, 0 keeps them all the same width.
+      </div>
+    </div>
+
     <div class="section">
       <h2>Colors</h2>
       <label class="field" style="margin-top:0;">Top outer line</label>
@@ -332,16 +351,26 @@
   // ====================== FLAT VIEW ======================
   // A straight-on, outside view of the same 4 rings and dots — no camera,
   // no near-clip half-hidden behind you. Each ring becomes a plain circle
-  // centered on the canvas, sized by FLAT_RADII (fraction of the
-  // canvas's shorter side) so all 4 nest concentrically and stay fully
-  // inside the frame; dots orbit their own circle at the same phi(t) used
-  // by the perspective view, always visible, full size, full brightness —
-  // "so you can see the concentric circles and the dots revolving around
-  // them" without anything ever hiding behind the camera.
-  const FLAT_RADII = [0.42, 0.32, 0.22, 0.12]; // fraction of min(cw,ch)/2, one per RINGS index — 4 distinct nested rings
+  // centered on the canvas; dots orbit their own circle at the same
+  // phi(t) used by the perspective view, always visible, full size, full
+  // brightness — "so you can see the concentric circles and the dots
+  // revolving around them" without anything ever hiding behind the
+  // camera.
+  //
+  // Ring i's radius (as a fraction of min(cw,ch)/2) is
+  // flatOrbitSize - i*flatSpacing, so ring 0 is always the outermost —
+  // both adjustable live via the Flat Layout sliders. Clamped to a small
+  // positive floor so an aggressive spacing can't push an inner ring to
+  // (or past) zero/negative radius.
+  function flatRadii(){
+    return RINGS.map((_, i) => Math.max(0.02, flatOrbitSize - i * flatSpacing));
+  }
 
   // ====================== STATE ======================
   let viewMode = 'perspective'; // 'perspective' | 'flat'
+  let flatOrbitSize = 0.65; // fraction of min(cw,ch)/2 — outermost ring's radius
+  let flatSpacing = 0.15;   // fraction of min(cw,ch)/2 — gap between consecutive rings
+  let flatWidthTaper = 0;   // -1..1 — negative thins outer rings, positive thickens them, 0 = uniform
   let lineColors = ['#aab0bd', '#aab0bd', '#aab0bd', '#aab0bd']; // one per RINGS index
   let dotColors = ['#ff2ea6', '#ff2ea6', '#ff2ea6', '#ff2ea6']; // one per RINGS index — a dot takes its color from the ring it orbits
   let bgColor = '#050506';
@@ -442,19 +471,27 @@
   }
 
   // Flat view: 4 plain concentric circles centered on the canvas, sized
-  // by FLAT_RADII (a fraction of the canvas's shorter side). Dots orbit
-  // at the same phi(t) as the perspective view — same speed, same phase
-  // spacing, same loop period — just always drawn, since there's no
-  // camera here for anything to hide behind.
+  // by flatRadii() (fractions of the canvas's shorter side, adjustable
+  // via the Flat Layout sliders). Dots orbit at the same phi(t) as the
+  // perspective view — same speed, same phase spacing, same loop period
+  // — just always drawn, since there's no camera here for anything to
+  // hide behind.
   function renderFlat(g, cw, ch, tSec){
     const cx = cw / 2, cy = ch / 2;
     const baseRadius = Math.min(cw, ch) / 2;
+    const radii = flatRadii();
     g.lineCap = 'round';
     RINGS.forEach((_, ringIdx) => {
       const rgb = hexToRgb(lineColors[ringIdx]);
-      const radius = FLAT_RADII[ringIdx] * baseRadius;
+      const radius = radii[ringIdx] * baseRadius;
+      // Taper: ring 0 is outermost, so u=1 there and u=0 at the
+      // innermost ring — width scales linearly across that range, with
+      // flatWidthTaper (-1..1) controlling how much and in which
+      // direction, clamped so an extreme taper never zeroes out a line.
+      const u = (RINGS.length - 1 - ringIdx) / (RINGS.length - 1);
+      const widthMult = Math.max(0.15, 1 + flatWidthTaper * (u - 0.5) * 2);
       g.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.9)`;
-      g.lineWidth = thickness;
+      g.lineWidth = thickness * widthMult;
       g.beginPath();
       g.arc(cx, cy, radius, 0, Math.PI * 2);
       g.stroke();
@@ -463,7 +500,7 @@
     const t = tSec / period();
     DOTS.forEach(dot => {
       const dc = dotColors[dot.ring];
-      const radius = FLAT_RADII[dot.ring] * baseRadius;
+      const radius = radii[dot.ring] * baseRadius;
       const phi = Math.PI * 2 * t + dot.phase;
       const x = cx + radius * Math.cos(phi);
       const y = cy + radius * Math.sin(phi);
@@ -549,13 +586,31 @@
 
   const btnViewPerspective = document.getElementById('btn-view-perspective');
   const btnViewFlat = document.getElementById('btn-view-flat');
+  const sectionFlatLayout = document.getElementById('section-flat-layout');
   function setViewMode(mode){
     viewMode = mode;
     btnViewPerspective.className = mode === 'perspective' ? 'btn-primary' : 'btn-secondary';
     btnViewFlat.className = mode === 'flat' ? 'btn-primary' : 'btn-secondary';
+    sectionFlatLayout.style.display = mode === 'flat' ? '' : 'none';
   }
   btnViewPerspective.addEventListener('click', () => setViewMode('perspective'));
   btnViewFlat.addEventListener('click', () => setViewMode('flat'));
+
+  const elRngFlatSize = document.getElementById('rng-flat-size');
+  const elRngFlatSpacing = document.getElementById('rng-flat-spacing');
+  const elRngFlatTaper = document.getElementById('rng-flat-taper');
+  elRngFlatSize.addEventListener('input', () => {
+    flatOrbitSize = parseInt(elRngFlatSize.value) / 100;
+    document.getElementById('val-flat-size').textContent = elRngFlatSize.value;
+  });
+  elRngFlatSpacing.addEventListener('input', () => {
+    flatSpacing = parseInt(elRngFlatSpacing.value) / 100;
+    document.getElementById('val-flat-spacing').textContent = elRngFlatSpacing.value;
+  });
+  elRngFlatTaper.addEventListener('input', () => {
+    flatWidthTaper = parseInt(elRngFlatTaper.value) / 100;
+    document.getElementById('val-flat-taper').textContent = elRngFlatTaper.value;
+  });
 
   let exportScale = 1;
   const btnRes1x = document.getElementById('btn-res-1x');
