@@ -106,6 +106,21 @@
     </div>
 
     <div class="section">
+      <h2>View</h2>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-primary" id="btn-view-perspective">Perspective</button>
+        <button class="btn-secondary" id="btn-view-flat">Flat</button>
+      </div>
+      <div class="hint" style="margin-top:10px; padding-top:0; border-top:none;">
+        <b>Perspective</b> is the immersive view from inside the ring
+        cluster — each dot is hidden for the half of its orbit that falls
+        behind you. <b>Flat</b> steps back to a straight-on view of four
+        concentric circles, so every ring and every dot's full orbit stays
+        visible the whole time.
+      </div>
+    </div>
+
+    <div class="section">
       <h2>Colors</h2>
       <label class="field" style="margin-top:0;">Top outer line</label>
       <div class="color-row">
@@ -314,7 +329,19 @@
   }
   let DOTS = buildDots(3);
 
+  // ====================== FLAT VIEW ======================
+  // A straight-on, outside view of the same 4 rings and dots — no camera,
+  // no near-clip half-hidden behind you. Each ring becomes a plain circle
+  // centered on the canvas, sized by FLAT_RADII (fraction of the
+  // canvas's shorter side) so all 4 nest concentrically and stay fully
+  // inside the frame; dots orbit their own circle at the same phi(t) used
+  // by the perspective view, always visible, full size, full brightness —
+  // "so you can see the concentric circles and the dots revolving around
+  // them" without anything ever hiding behind the camera.
+  const FLAT_RADII = [0.42, 0.32, 0.22, 0.12]; // fraction of min(cw,ch)/2, one per RINGS index — 4 distinct nested rings
+
   // ====================== STATE ======================
+  let viewMode = 'perspective'; // 'perspective' | 'flat'
   let lineColors = ['#aab0bd', '#aab0bd', '#aab0bd', '#aab0bd']; // one per RINGS index
   let dotColors = ['#ff2ea6', '#ff2ea6', '#ff2ea6', '#ff2ea6']; // one per RINGS index — a dot takes its color from the ring it orbits
   let bgColor = '#050506';
@@ -335,7 +362,9 @@
   // Renders one deterministic frame at elapsed time `tSec` (seconds since
   // the orbit's own t=0) into the given context/canvas size — used both by
   // the live rAF loop and by the video exporter, so preview and export are
-  // pixel-for-pixel the same math.
+  // pixel-for-pixel the same math. Dispatches on viewMode; both branches
+  // share every other control (colors, thickness, dot size/count, speed,
+  // glow) — only the geometry changes.
   function renderFrame(g, cw, ch, tSec){
     g.save();
     g.clearRect(0, 0, cw, ch);
@@ -343,7 +372,12 @@
       g.fillStyle = bgColor;
       g.fillRect(0, 0, cw, ch);
     }
+    if(viewMode === 'flat') renderFlat(g, cw, ch, tSec);
+    else renderPerspective(g, cw, ch, tSec);
+    g.restore();
+  }
 
+  function renderPerspective(g, cw, ch, tSec){
     g.lineCap = 'round';
     const STEPS = 400;
     RINGS.forEach((ring, ringIdx) => {
@@ -405,7 +439,46 @@
       g.shadowBlur = 0;
       g.globalAlpha = 1;
     });
-    g.restore();
+  }
+
+  // Flat view: 4 plain concentric circles centered on the canvas, sized
+  // by FLAT_RADII (a fraction of the canvas's shorter side). Dots orbit
+  // at the same phi(t) as the perspective view — same speed, same phase
+  // spacing, same loop period — just always drawn, since there's no
+  // camera here for anything to hide behind.
+  function renderFlat(g, cw, ch, tSec){
+    const cx = cw / 2, cy = ch / 2;
+    const baseRadius = Math.min(cw, ch) / 2;
+    g.lineCap = 'round';
+    RINGS.forEach((_, ringIdx) => {
+      const rgb = hexToRgb(lineColors[ringIdx]);
+      const radius = FLAT_RADII[ringIdx] * baseRadius;
+      g.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.9)`;
+      g.lineWidth = thickness;
+      g.beginPath();
+      g.arc(cx, cy, radius, 0, Math.PI * 2);
+      g.stroke();
+    });
+
+    const t = tSec / period();
+    DOTS.forEach(dot => {
+      const dc = dotColors[dot.ring];
+      const radius = FLAT_RADII[dot.ring] * baseRadius;
+      const phi = Math.PI * 2 * t + dot.phase;
+      const x = cx + radius * Math.cos(phi);
+      const y = cy + radius * Math.sin(phi);
+      if(glowEnabled){
+        g.shadowColor = dc;
+        g.shadowBlur = dotRadius * 3.2;
+      } else {
+        g.shadowBlur = 0;
+      }
+      g.fillStyle = dc;
+      g.beginPath();
+      g.arc(x, y, dotRadius, 0, Math.PI * 2);
+      g.fill();
+      g.shadowBlur = 0;
+    });
   }
 
   function hexToRgb(hex){
@@ -473,6 +546,16 @@
     DOTS = buildDots(count);
   });
   elChkGlow.addEventListener('change', () => { glowEnabled = elChkGlow.checked; });
+
+  const btnViewPerspective = document.getElementById('btn-view-perspective');
+  const btnViewFlat = document.getElementById('btn-view-flat');
+  function setViewMode(mode){
+    viewMode = mode;
+    btnViewPerspective.className = mode === 'perspective' ? 'btn-primary' : 'btn-secondary';
+    btnViewFlat.className = mode === 'flat' ? 'btn-primary' : 'btn-secondary';
+  }
+  btnViewPerspective.addEventListener('click', () => setViewMode('perspective'));
+  btnViewFlat.addEventListener('click', () => setViewMode('flat'));
 
   let exportScale = 1;
   const btnRes1x = document.getElementById('btn-res-1x');
